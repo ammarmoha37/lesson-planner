@@ -4,27 +4,24 @@ const express = require('express');
 const app = express();
 app.use(express.json({ limit: '10mb' }));
 
-// Load the v2 function handler
+// Load the function handler (stream-wrapped)
 const generatePlan = require('./netlify/functions/generate-plan');
 
 app.all('/.netlify/functions/generate-plan', async (req, res) => {
   try {
-    // Build a standard Request object for the v2 handler
-    const url = `http://localhost:8888${req.originalUrl}`;
-    const init = { method: req.method, headers: req.headers };
-    if (req.method !== 'GET' && req.method !== 'HEAD') {
-      init.body = JSON.stringify(req.body);
-      init.duplex = 'half';
-    }
-    const request = new Request(url, init);
+    const event = {
+      httpMethod: req.method,
+      body: JSON.stringify(req.body),
+      headers: req.headers,
+    };
+    const result = await generatePlan.handler(event, {});
+    const headers = result.headers || {};
+    Object.entries(headers).forEach(([k, v]) => res.setHeader(k, v));
 
-    const response = await generatePlan(request, {});
-
-    res.status(response.status);
-    response.headers.forEach((value, key) => res.setHeader(key, value));
-
-    if (response.body) {
-      const reader = response.body.getReader();
+    // Handle streaming body (ReadableStream)
+    if (result.body && typeof result.body.getReader === 'function') {
+      res.status(result.statusCode);
+      const reader = result.body.getReader();
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
@@ -32,8 +29,7 @@ app.all('/.netlify/functions/generate-plan', async (req, res) => {
       }
       res.end();
     } else {
-      const text = await response.text();
-      res.send(text);
+      res.status(result.statusCode).send(result.body);
     }
   } catch (err) {
     console.error('Function error:', err);

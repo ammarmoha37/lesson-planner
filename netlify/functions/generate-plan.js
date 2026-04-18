@@ -1,15 +1,14 @@
-// Netlify Functions v2 — streaming response to avoid timeout
-const { Config } = require('@netlify/functions');
+// Netlify Functions — streaming via stream() wrapper to avoid 30s timeout
+const { stream } = require('@netlify/functions');
 const Anthropic = require('@anthropic-ai/sdk');
 const { createClient } = require('@supabase/supabase-js');
 
-function getCorsHeaders(req) {
+function getCorsHeaders(origin) {
   const allowedOrigins = [
     'http://localhost:4200',
     'http://localhost:8888',
     process.env.SITE_URL,
   ].filter(Boolean);
-  const origin = (req.headers.get ? req.headers.get('origin') : req.headers?.origin) || '';
   const corsOrigin = allowedOrigins.includes(origin) ? origin : allowedOrigins[0];
   return {
     'Access-Control-Allow-Origin': corsOrigin || '*',
@@ -18,114 +17,120 @@ function getCorsHeaders(req) {
   };
 }
 
-const handler = async (req) => {
-  const cors = getCorsHeaders(req);
+exports.handler = stream(async (event) => {
+  const origin = event.headers?.origin || '';
+  const cors = getCorsHeaders(origin);
 
-  if (req.method === 'OPTIONS') {
-    return new Response('', { status: 200, headers: cors });
+  if (event.httpMethod === 'OPTIONS') {
+    return {
+      statusCode: 200,
+      headers: cors,
+      body: '',
+    };
   }
 
-  if (req.method !== 'POST') {
-    return new Response(JSON.stringify({ error: 'Method not allowed' }), {
-      status: 405,
+  if (event.httpMethod !== 'POST') {
+    return {
+      statusCode: 405,
       headers: { ...cors, 'Content-Type': 'application/json' },
-    });
+      body: JSON.stringify({ error: 'Method not allowed' }),
+    };
   }
 
   let body;
   try {
-    body = await req.json();
+    body = JSON.parse(event.body);
   } catch {
-    return new Response(JSON.stringify({ error: 'Invalid JSON' }), {
-      status: 400,
+    return {
+      statusCode: 400,
       headers: { ...cors, 'Content-Type': 'application/json' },
-    });
+      body: JSON.stringify({ error: 'Invalid JSON' }),
+    };
   }
 
   const { prompt, userId } = body;
 
   if (!prompt) {
-    return new Response(JSON.stringify({ error: 'Prompt is required' }), {
-      status: 400,
+    return {
+      statusCode: 400,
       headers: { ...cors, 'Content-Type': 'application/json' },
-    });
+      body: JSON.stringify({ error: 'Prompt is required' }),
+    };
   }
 
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+  const { readable, writable } = new TransformStream();
+  const writer = writable.getWriter();
   const encoder = new TextEncoder();
 
-  const readable = new ReadableStream({
-    async start(controller) {
-      try {
-        const stream = await client.messages.create({
-          model: 'claude-sonnet-4-20250514',
-          max_tokens: 12000,
-          messages: [{ role: 'user', content: prompt }],
-          stream: true,
-        });
+  // Run streaming in background — write chunks as they arrive
+  (async () => {
+    try {
+      const messageStream = await client.messages.create({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 12000,
+        messages: [{ role: 'user', content: prompt }],
+        stream: true,
+      });
 
-        let inputTokens = 0;
-        let outputTokens = 0;
+      let inputTokens = 0;
+      let outputTokens = 0;
 
-        for await (const event of stream) {
-          if (event.type === 'message_start') {
-            inputTokens = event.message?.usage?.input_tokens || 0;
-          } else if (event.type === 'content_block_delta' && event.delta?.type === 'text_delta') {
-            const chunk = JSON.stringify({ type: 'delta', text: event.delta.text });
-            controller.enqueue(encoder.encode(`data: ${chunk}\n\n`));
-          } else if (event.type === 'message_delta') {
-            outputTokens = event.usage?.output_tokens || 0;
-          }
+      for await (const ev of messageStream) {
+        if (ev.type === 'message_start') {
+          inputTokens = ev.message?.usage?.input_tokens || 0;
+        } else if (ev.type === 'content_block_delta' && ev.delta?.type === 'text_delta') {
+          const chunk = JSON.stringify({ type: 'delta', text: ev.delta.text });
+          await writer.write(encoder.encode(`data: ${chunk}\n\n`));
+        } else if (ev.type === 'message_delta') {
+          outputTokens = ev.usage?.output_tokens || 0;
         }
-
-        const totalTokens = inputTokens + outputTokens;
-        const estimatedCost = (inputTokens * 3 + outputTokens * 15) / 1_000_000;
-
-        // Track usage in Supabase
-        if (userId && process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_KEY) {
-          try {
-            const supabase = createClient(
-              process.env.SUPABASE_URL,
-              process.env.SUPABASE_SERVICE_KEY,
-            );
-            await supabase.from('api_usage').insert({
-              user_id: userId,
-              prompt_tokens: inputTokens,
-              completion_tokens: outputTokens,
-              total_tokens: totalTokens,
-              estimated_cost: estimatedCost,
-              model: 'claude-sonnet-4',
-            });
-          } catch (e) {
-            console.error('Usage tracking error:', e);
-          }
-        }
-
-        const done = JSON.stringify({
-          type: 'done',
-          usage: { inputTokens, outputTokens, totalTokens, estimatedCost },
-        });
-        controller.enqueue(encoder.encode(`data: ${done}\n\n`));
-      } catch (error) {
-        const err = JSON.stringify({
-          type: 'error',
-          error: error.message || 'Failed to generate plan',
-        });
-        controller.enqueue(encoder.encode(`data: ${err}\n\n`));
       }
-      controller.close();
-    },
-  });
 
-  return new Response(readable, {
+      const totalTokens = inputTokens + outputTokens;
+      const estimatedCost = (inputTokens * 3 + outputTokens * 15) / 1_000_000;
+
+      // Track usage in Supabase
+      if (userId && process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_KEY) {
+        try {
+          const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
+          await supabase.from('api_usage').insert({
+            user_id: userId,
+            prompt_tokens: inputTokens,
+            completion_tokens: outputTokens,
+            total_tokens: totalTokens,
+            estimated_cost: estimatedCost,
+            model: 'claude-sonnet-4',
+          });
+        } catch (e) {
+          console.error('Usage tracking error:', e);
+        }
+      }
+
+      const done = JSON.stringify({
+        type: 'done',
+        usage: { inputTokens, outputTokens, totalTokens, estimatedCost },
+      });
+      await writer.write(encoder.encode(`data: ${done}\n\n`));
+    } catch (error) {
+      const err = JSON.stringify({
+        type: 'error',
+        error: error.message || 'Failed to generate plan',
+      });
+      await writer.write(encoder.encode(`data: ${err}\n\n`));
+    }
+    await writer.close();
+  })();
+
+  return {
+    statusCode: 200,
     headers: {
       ...cors,
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
     },
-  });
-};
-
-// v2 function format: export the handler directly (not exports.handler)
-module.exports = handler;
+    body: readable,
+  };
+});
 module.exports.config = {};
