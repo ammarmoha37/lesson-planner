@@ -1,6 +1,4 @@
 import { Injectable } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
-import { firstValueFrom } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { AuthService } from './auth.service';
 
@@ -35,10 +33,7 @@ export interface GenerateResult {
 
 @Injectable({ providedIn: 'root' })
 export class AiService {
-  constructor(
-    private http: HttpClient,
-    private auth: AuthService,
-  ) {}
+  constructor(private auth: AuthService) {}
 
   buildPrompt(form: PlanFormData): string {
     const dlMap: Record<string, string> = {
@@ -102,9 +97,46 @@ ${form.lang === 'en' ? 'Note: Write the entire lesson plan in English since this
   async generate(form: PlanFormData): Promise<GenerateResult> {
     const prompt = this.buildPrompt(form);
     const userId = this.auth.user()?.id;
-    const res = await firstValueFrom(
-      this.http.post<GenerateResult>(environment.generatePlanUrl, { prompt, userId }),
-    );
-    return res;
+
+    const response = await fetch(environment.generatePlanUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt, userId }),
+    });
+
+    if (!response.ok) {
+      let msg = 'فشل في إنشاء التحضير';
+      try {
+        const err = await response.json();
+        msg = err.error || msg;
+      } catch {}
+      throw new Error(msg);
+    }
+
+    const reader = response.body!.getReader();
+    const decoder = new TextDecoder();
+    let fullText = '';
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        const data = JSON.parse(line.slice(6));
+        if (data.type === 'delta') {
+          fullText += data.text;
+        } else if (data.type === 'error') {
+          throw new Error(data.error);
+        }
+      }
+    }
+
+    return { text: fullText, success: true };
   }
 }
