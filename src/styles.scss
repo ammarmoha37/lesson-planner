@@ -1,0 +1,47 @@
+@import 'tailwindcss';
+
+/* ─── Custom Omani Theme ─── */
+@theme {
+  --color-primary: #1a6b4a;
+  --color-primary-dark: #0a3d2b;
+  --color-primary-light: #2d9566;
+  --color-primary-bg: #e8f5ef;
+  --color-primary-border: #c5e0d4;
+  --color-danger: #c0392b;
+  --color-danger-bg: #fdf0ee;
+  --color-gold: #b8860b;
+  --color-gold-bg: #fdf8e8;
+  --color-gold-border: #e8d48a;
+  --color-blue: #1a4f8a;
+  --color-blue-bg: #eef4fc;
+  --color-surface: #f4f2ec;
+  --color-card: #ffffff;
+  --color-text: #1a1a1a;
+  --color-muted: #5a5a5a;
+  --color-border: #ddd9d0;
+  --font-family-display: 'Cairo', sans-serif;
+  --font-family-body: 'Tajawal', sans-serif;
+}
+
+body {
+  font-family: var(--font-family-body);
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-primary-border);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+}

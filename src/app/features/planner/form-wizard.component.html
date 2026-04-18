@@ -1,0 +1,360 @@
+<!-- Loading Overlay -->
+@if (loading()) {
+  <div class="fixed inset-0 z-50 bg-black/50 flex items-center justify-center">
+    <div class="bg-card rounded-2xl p-8 max-w-sm w-full text-center shadow-2xl space-y-4">
+      <div
+        class="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto"
+      ></div>
+      <p class="font-display font-bold text-primary text-lg">جارٍ إعداد التحضير...</p>
+      <p class="text-sm text-muted">{{ progressMsg() }}</p>
+      <div class="w-full h-2 bg-surface rounded-full overflow-hidden">
+        <div
+          class="h-full bg-primary rounded-full transition-all duration-500"
+          [style.width.%]="progress()"
+        ></div>
+      </div>
+    </div>
+  </div>
+}
+
+<!-- Steps Bar -->
+<div class="flex gap-2 mb-6 overflow-x-auto pb-2">
+  @for (s of [1, 2, 3, 4]; track s) {
+    <button
+      (click)="goStep(s)"
+      class="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all shrink-0"
+      [class]="
+        s === step()
+          ? 'bg-primary text-white shadow-md'
+          : s < step()
+            ? 'bg-primary-bg text-primary'
+            : 'bg-card text-muted border border-border'
+      "
+    >
+      <span
+        class="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold"
+        [class]="
+          s === step()
+            ? 'bg-white text-primary'
+            : s < step()
+              ? 'bg-primary text-white'
+              : 'bg-surface text-muted'
+        "
+      >
+        {{ ['1', '2', '3', '4'][s - 1] }}
+      </span>
+      <span class="hidden sm:inline">{{
+        ['معلومات الدرس', 'التدريس والتقويم', 'خيارات إضافية', 'مراجعة وإنشاء'][s - 1]
+      }}</span>
+    </button>
+  }
+</div>
+
+<!-- PAGE 1: Lesson Info -->
+@if (step() === 1) {
+  <div
+    class="bg-gold-bg border border-gold-border rounded-xl px-4 py-3 text-sm text-gold mb-5 flex gap-2"
+  >
+    💡 أدخل معلومات الدرس الأساسية — الذكاء الاصطناعي سيُعدّ تحضيراً شاملاً وفق معايير وزارة التربية
+    والتعليم.
+  </div>
+  <div class="card">
+    <div class="card-header">📚 <span>معلومات الدرس الأساسية</span></div>
+    <div class="p-5 space-y-4">
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <label class="label">المادة الدراسية <span class="text-danger">*</span></label>
+          <select [(ngModel)]="subject" class="input-field">
+            <option value="">— اختر المادة —</option>
+            @for (s of subjects; track s) {
+              <option [value]="s">{{ s }}</option>
+            }
+          </select>
+        </div>
+        <div>
+          <label class="label">الصف الدراسي <span class="text-danger">*</span></label>
+          <select [(ngModel)]="grade" class="input-field">
+            <option value="">— اختر الصف —</option>
+            @for (g of grades; track g) {
+              <option [value]="g">{{ g }}</option>
+            }
+          </select>
+        </div>
+        <div>
+          <label class="label">اسم الوحدة الدراسية</label
+          ><input
+            [(ngModel)]="unit"
+            class="input-field"
+            placeholder="مثال: الوحدة الثالثة — الماء والبيئة"
+          />
+        </div>
+        <div>
+          <label class="label">رقم الفصل / الدرس</label
+          ><input
+            [(ngModel)]="chapter"
+            class="input-field"
+            placeholder="مثال: الفصل الثاني، درس 4"
+          />
+        </div>
+        <div class="sm:col-span-2">
+          <label class="label">عنوان الدرس <span class="text-danger">*</span></label
+          ><input
+            [(ngModel)]="lessonTitle"
+            class="input-field"
+            placeholder="مثال: خصائص المثلثات — التحلل والتعفن"
+          />
+        </div>
+        <div>
+          <label class="label">الفصل الدراسي</label>
+          <select [(ngModel)]="semester" class="input-field">
+            <option>الفصل الأول</option>
+            <option>الفصل الثاني</option>
+            <option>الفصل الثالث</option>
+          </select>
+        </div>
+        <div>
+          <label class="label">عدد الحصص</label>
+          <select [(ngModel)]="periods" class="input-field">
+            <option value="1">حصة واحدة (45 دقيقة)</option>
+            <option value="2">حصتان (90 دقيقة)</option>
+            <option value="3">ثلاث حصص</option>
+          </select>
+        </div>
+        <div>
+          <label class="label">متوسط عدد الطلاب</label>
+          <select [(ngModel)]="classSize" class="input-field">
+            <option>أقل من 20</option>
+            <option>20–30</option>
+            <option>30–35</option>
+            <option>أكثر من 35</option>
+          </select>
+        </div>
+        <div>
+          <label class="label">التاريخ</label
+          ><input type="date" [(ngModel)]="lessonDate" class="input-field" />
+        </div>
+        <div class="sm:col-span-2">
+          <label class="label">ملاحظات خاصة</label
+          ><textarea
+            [(ngModel)]="extra"
+            rows="3"
+            class="input-field"
+            placeholder="طلاب ذوو احتياجات، تركيز على مهارة معينة، مناسبة وطنية..."
+          ></textarea>
+        </div>
+      </div>
+      <div class="flex justify-start">
+        <button (click)="goStep(2)" class="btn-primary">التالي ←</button>
+      </div>
+    </div>
+  </div>
+}
+
+<!-- PAGE 2: Teaching & Assessment -->
+@if (step() === 2) {
+  <div class="card">
+    <div class="card-header">🎯 <span>التدريس والتقويم</span></div>
+    <div class="p-5 space-y-5">
+      <div>
+        <label class="label">استراتيجيات التدريس</label>
+        <div class="pills">
+          @for (s of allStrategies; track s) {
+            <button
+              (click)="toggleItem(strategies, s)"
+              class="pill"
+              [class.pill-active]="hasItem(strategies, s)"
+            >
+              {{ s }}
+            </button>
+          }
+        </div>
+      </div>
+      <div>
+        <label class="label">أدوات التقويم</label>
+        <div class="pills">
+          @for (a of allAssessments; track a) {
+            <button
+              (click)="toggleItem(assessments, a)"
+              class="pill"
+              [class.pill-active]="hasItem(assessments, a)"
+            >
+              {{ a }}
+            </button>
+          }
+        </div>
+      </div>
+      <div>
+        <label class="label">مهارات القرن الحادي والعشرين</label>
+        <div class="pills">
+          @for (s of allSkills; track s) {
+            <button
+              (click)="toggleItem(skills, s)"
+              class="pill"
+              [class.pill-active]="hasItem(skills, s)"
+            >
+              {{ s }}
+            </button>
+          }
+        </div>
+      </div>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <label class="label">مستوى الطلاب الغالب</label>
+          <select [(ngModel)]="studentLevel" class="input-field">
+            <option>متوسط</option>
+            <option>متقدم</option>
+            <option>متأخر دراسياً</option>
+            <option>مختلط المستويات</option>
+          </select>
+        </div>
+        <div>
+          <label class="label">الوسائل التقنية المتاحة</label>
+          <select [(ngModel)]="tech" class="input-field">
+            <option>سبورة تقليدية فقط</option>
+            <option>جهاز عرض (بروجيكتر)</option>
+            <option>ألواح ذكية</option>
+            <option>أجهزة لوحية للطلاب</option>
+            <option>مختبر حاسوب</option>
+          </select>
+        </div>
+      </div>
+      <div class="flex justify-between">
+        <button (click)="goStep(1)" class="btn-secondary">← السابق</button>
+        <button (click)="goStep(3)" class="btn-primary">التالي ←</button>
+      </div>
+    </div>
+  </div>
+}
+
+<!-- PAGE 3: Extra Options -->
+@if (step() === 3) {
+  <div class="card">
+    <div class="card-header">⚙️ <span>الخيارات الإضافية</span></div>
+    <div class="p-5 space-y-5">
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <label class="label">مستوى التفاصيل</label>
+          <select [(ngModel)]="detail" class="input-field">
+            <option value="standard">قياسي (مناسب للطباعة)</option>
+            <option value="detailed">مفصّل (شامل مع أمثلة واسعة)</option>
+            <option value="brief">مختصر (للمراجعة السريعة)</option>
+          </select>
+        </div>
+        <div>
+          <label class="label">التكامل مع الهوية العُمانية</label>
+          <select [(ngModel)]="integration" class="input-field">
+            <option value="yes">نعم، أدمج بشكل طبيعي</option>
+            <option value="opt">حسب الحاجة</option>
+            <option value="no">لا</option>
+          </select>
+        </div>
+        <div>
+          <label class="label">لغة التحضير</label>
+          <select [(ngModel)]="lang" class="input-field">
+            <option value="ar">عربي فصيح</option>
+            <option value="simple">عربي مبسّط</option>
+            <option value="en">English (للغة الإنجليزية)</option>
+          </select>
+        </div>
+        <div>
+          <label class="label">التنظيم الزمني</label>
+          <select [(ngModel)]="timing" class="input-field">
+            <option value="flex">مرن (تقديري)</option>
+            <option value="strict">محدد بالدقيقة</option>
+          </select>
+        </div>
+      </div>
+      <div>
+        <label class="label">أقسام إضافية مطلوبة</label>
+        <div class="pills">
+          @for (e of allExtras; track e.v) {
+            <button
+              (click)="toggleItem(extras, e.v)"
+              class="pill"
+              [class.pill-active]="hasItem(extras, e.v)"
+            >
+              {{ e.l }}
+            </button>
+          }
+        </div>
+      </div>
+      <div class="flex justify-between">
+        <button (click)="goStep(2)" class="btn-secondary">← السابق</button>
+        <button (click)="goStep(4)" class="btn-primary">التالي ← مراجعة وإنشاء</button>
+      </div>
+    </div>
+  </div>
+}
+
+<!-- PAGE 4: Review -->
+@if (step() === 4) {
+  <div class="card">
+    <div class="card-header">👁️ <span>مراجعة المعلومات قبل الإنشاء</span></div>
+    <div class="p-5 space-y-5">
+      <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
+        <div class="review-item">
+          <span class="text-muted text-xs">📚 المادة</span
+          ><span class="font-semibold">{{ subject || '—' }}</span>
+        </div>
+        <div class="review-item">
+          <span class="text-muted text-xs">🎓 الصف</span
+          ><span class="font-semibold">{{ grade || '—' }}</span>
+        </div>
+        <div class="review-item">
+          <span class="text-muted text-xs">📖 الوحدة</span
+          ><span class="font-semibold">{{ unit || '—' }}</span>
+        </div>
+        <div class="review-item">
+          <span class="text-muted text-xs">📝 الدرس</span
+          ><span class="font-semibold">{{ lessonTitle || '—' }}</span>
+        </div>
+        <div class="review-item">
+          <span class="text-muted text-xs">⏰ الحصص</span
+          ><span class="font-semibold">{{ periods }} حصة</span>
+        </div>
+        <div class="review-item">
+          <span class="text-muted text-xs">📅 التاريخ</span
+          ><span class="font-semibold">{{ lessonDate || '—' }}</span>
+        </div>
+      </div>
+
+      @if (strategies.length) {
+        <div>
+          <span class="text-xs text-muted font-semibold">الاستراتيجيات:</span>
+          <div class="flex flex-wrap gap-1.5 mt-1">
+            @for (s of strategies; track s) {
+              <span class="bg-primary-bg text-primary px-2.5 py-0.5 rounded-full text-xs">{{
+                s
+              }}</span>
+            }
+          </div>
+        </div>
+      }
+
+      @if (extras.length) {
+        <div>
+          <span class="text-xs text-muted font-semibold">الأقسام الإضافية:</span>
+          <div class="flex flex-wrap gap-1.5 mt-1">
+            @for (e of extras; track e) {
+              <span
+                class="bg-gold-bg text-gold border border-gold-border px-2.5 py-0.5 rounded-full text-xs"
+                >{{ e }}</span
+              >
+            }
+          </div>
+        </div>
+      }
+
+      <button
+        (click)="generate()"
+        [disabled]="loading()"
+        class="w-full py-3.5 bg-gradient-to-l from-primary-dark to-primary text-white rounded-xl font-display text-lg font-bold hover:opacity-90 transition disabled:opacity-60 disabled:cursor-not-allowed shadow-lg"
+      >
+        ✨ إنشاء التحضير الكامل الآن
+      </button>
+      <div class="flex justify-start">
+        <button (click)="goStep(3)" class="btn-secondary">← تعديل</button>
+      </div>
+    </div>
+  </div>
+}
