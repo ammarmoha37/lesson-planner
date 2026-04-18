@@ -1,4 +1,5 @@
 // Netlify Functions v2 — streaming response to avoid timeout
+const { Config } = require('@netlify/functions');
 const Anthropic = require('@anthropic-ai/sdk');
 const { createClient } = require('@supabase/supabase-js');
 
