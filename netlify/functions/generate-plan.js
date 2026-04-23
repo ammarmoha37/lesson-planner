@@ -1,5 +1,4 @@
 // Netlify Functions — streaming via stream() wrapper to avoid 30s timeout
-const { stream } = require('@netlify/functions');
 const Anthropic = require('@anthropic-ai/sdk');
 const { createClient } = require('@supabase/supabase-js');
 
@@ -17,7 +16,11 @@ function getCorsHeaders(origin) {
   };
 }
 
-exports.handler = stream(async (event) => {
+// Check if running in Netlify environment
+const isNetlify = typeof awslambda !== 'undefined';
+
+// Main handler function
+async function handleRequest(event) {
   const origin = event.headers?.origin || '';
   const cors = getCorsHeaders(origin);
 
@@ -58,6 +61,8 @@ exports.handler = stream(async (event) => {
     };
   }
 
+  console.log('Generating plan for user:', userId || 'anonymous');
+
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
   const { readable, writable } = new TransformStream();
@@ -69,7 +74,7 @@ exports.handler = stream(async (event) => {
     try {
       const messageStream = await client.messages.create({
         model: 'claude-sonnet-4-20250514',
-        max_tokens: 12000,
+        max_tokens: 16000, // Increased for comprehensive lesson plans
         messages: [{ role: 'user', content: prompt }],
         stream: true,
       });
@@ -91,11 +96,19 @@ exports.handler = stream(async (event) => {
       const totalTokens = inputTokens + outputTokens;
       const estimatedCost = (inputTokens * 3 + outputTokens * 15) / 1_000_000;
 
+      console.log('Generation complete:', {
+        inputTokens,
+        outputTokens,
+        totalTokens,
+        estimatedCost,
+        userId,
+      });
+
       // Track usage in Supabase
       if (userId && process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_KEY) {
         try {
           const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
-          await supabase.from('api_usage').insert({
+          const { data, error } = await supabase.from('api_usage').insert({
             user_id: userId,
             prompt_tokens: inputTokens,
             completion_tokens: outputTokens,
@@ -103,9 +116,16 @@ exports.handler = stream(async (event) => {
             estimated_cost: estimatedCost,
             model: 'claude-sonnet-4',
           });
+          if (error) {
+            console.error('Usage tracking error:', error);
+          } else {
+            console.log('Usage tracked successfully for user:', userId);
+          }
         } catch (e) {
-          console.error('Usage tracking error:', e);
+          console.error('Usage tracking exception:', e);
         }
+      } else {
+        console.warn('Usage tracking skipped - missing userId or Supabase config');
       }
 
       const done = JSON.stringify({
@@ -132,5 +152,16 @@ exports.handler = stream(async (event) => {
     },
     body: readable,
   };
-});
+}
+
+// Export handler with conditional streaming support
+if (isNetlify) {
+  // In Netlify, use stream wrapper
+  const { stream } = require('@netlify/functions');
+  exports.handler = stream(handleRequest);
+} else {
+  // For local dev, use regular handler
+  exports.handler = handleRequest;
+}
+
 module.exports.config = {};

@@ -98,6 +98,8 @@ ${form.lang === 'en' ? 'Note: Write the entire lesson plan in English since this
     const prompt = this.buildPrompt(form);
     const userId = this.auth.user()?.id;
 
+    console.log('Starting generation for user:', userId);
+
     const response = await fetch(environment.generatePlanUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -117,10 +119,33 @@ ${form.lang === 'en' ? 'Note: Write the entire lesson plan in English since this
     const decoder = new TextDecoder();
     let fullText = '';
     let buffer = '';
+    let isDone = false;
 
-    while (true) {
+    while (!isDone) {
       const { done, value } = await reader.read();
-      if (done) break;
+      if (done) {
+        isDone = true;
+        // Process any remaining buffer
+        if (buffer.trim()) {
+          const lines = buffer.split('\n');
+          for (const line of lines) {
+            if (!line.startsWith('data: ')) continue;
+            try {
+              const data = JSON.parse(line.slice(6));
+              if (data.type === 'delta') {
+                fullText += data.text;
+              } else if (data.type === 'error') {
+                throw new Error(data.error);
+              } else if (data.type === 'done') {
+                console.log('Stream completed with usage:', data.usage);
+              }
+            } catch (e) {
+              console.warn('Failed to parse SSE line:', line);
+            }
+          }
+        }
+        break;
+      }
 
       buffer += decoder.decode(value, { stream: true });
       const lines = buffer.split('\n');
@@ -128,15 +153,22 @@ ${form.lang === 'en' ? 'Note: Write the entire lesson plan in English since this
 
       for (const line of lines) {
         if (!line.startsWith('data: ')) continue;
-        const data = JSON.parse(line.slice(6));
-        if (data.type === 'delta') {
-          fullText += data.text;
-        } else if (data.type === 'error') {
-          throw new Error(data.error);
+        try {
+          const data = JSON.parse(line.slice(6));
+          if (data.type === 'delta') {
+            fullText += data.text;
+          } else if (data.type === 'error') {
+            throw new Error(data.error);
+          } else if (data.type === 'done') {
+            console.log('Stream completed with usage:', data.usage);
+          }
+        } catch (e) {
+          console.warn('Failed to parse SSE line:', line);
         }
       }
     }
 
+    console.log('Generation complete, total length:', fullText.length);
     return { text: fullText, success: true };
   }
 }
